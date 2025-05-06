@@ -24,9 +24,35 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
     socket.slotType = slotType
     socket:SetID(index)
 
-    socket:EnableMouse(true)
-    socket:RegisterForClicks("AnyUp")
-    socket:RegisterForDrag("LeftButton")
+	socket:EnableMouse(true)
+	socket:RegisterForClicks("AnyUp")
+	socket:RegisterForDrag("LeftButton")
+
+	-- ✅ Tooltip Logic
+	socket:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+
+		if self.assignedId then
+			if self.slotType == "mounts" then
+				local name = C_MountJournal.GetMountInfoByID(self.assignedId)
+				GameTooltip:SetText(name or "Unknown Mount")
+			elseif self.slotType == "pets" then
+				local speciesID = C_PetJournal.GetPetInfoByPetID(self.assignedId)
+				local petName = C_PetJournal.GetPetInfoBySpeciesID(speciesID)
+				GameTooltip:SetText(petName or "Unknown Pet")
+			else
+				GameTooltip:SetText("Item not recognized")
+			end
+		else
+			GameTooltip:SetText("Drag a Favorite in here to Socket Them")
+		end
+
+		GameTooltip:Show()
+	end)
+
+	socket:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
 
 -- ✅ Retrieve stored data for this socket
     local savedData = SidekickStationDB.iconData[slotType][index]
@@ -43,7 +69,18 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
     end
 
 -- ✅ Click functionality
-    socket:SetScript("OnClick", function(self)
+socket:SetScript("OnClick", function(self, button)
+    if IsShiftKeyDown() and button == "LeftButton" then
+        -- ✅ Clear socket contents
+        SidekickStationDB.iconData[self.slotType][self:GetID()] = nil
+        self.assignedId = nil
+        self.assignedName = "Unknown"
+        self.assignedIcon = "Interface\\Icons\\INV_Misc_QuestionMark"
+        
+        -- ✅ Update UI
+        self:SetNormalTexture(self.assignedIcon)
+    else
+        -- ✅ Normal behavior: Summon mount/pet if assigned
         local clickedData = SidekickStationDB.iconData[self.slotType] and SidekickStationDB.iconData[self.slotType][self:GetID()]
         
         if clickedData then
@@ -55,13 +92,10 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
                 C_MountJournal.SummonByID(self.assignedId)
             elseif self.slotType == "pets" then
                 C_PetJournal.SummonPetByGUID(self.assignedId)
-            else
-                print("DEBUG: No valid action found for slotType: " .. tostring(self.slotType))
             end
-        else
-            print("DEBUG: No valid item found for this slotType: " .. tostring(self.slotType))
         end
-    end)
+    end
+end)
 
 -- ✅ Drag & drop functionality (Fixed)
     socket:SetScript("OnReceiveDrag", function(self)
@@ -73,7 +107,7 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
             local speciesID = C_PetJournal.GetPetInfoByPetID(itemID)
             itemName, itemTexture = C_PetJournal.GetPetInfoBySpeciesID(speciesID)
         else
-            print("DEBUG: Unsupported item type dragged.")
+            print("Unsupported item type dragged.")
             return
         end
 
@@ -92,8 +126,6 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
                 name = self.assignedName,
                 icon = self.assignedIcon
             }
-
-            print("DEBUG: Dragged item stored in SidekickStationDB. ID:", self.assignedId)
             ClearCursor()
         end
     end)
