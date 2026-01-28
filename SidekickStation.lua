@@ -9,7 +9,8 @@ local function EnsureDatabaseExists()
     if not _G["SidekickStationDB"] then
         _G["SidekickStationDB"] = {
             iconData = { mounts = {}, pets = {} },
-            windowOpen = true
+            windowOpen = true,
+            minimapAngle = 0 -- default: right side
         }
     end
     SidekickStationDB = _G["SidekickStationDB"]
@@ -18,7 +19,27 @@ end
 EnsureDatabaseExists()
 
 ----------------------------------------------------------
--- Create Sidekick Sockets (Drag-and-Drop Slots)
+-- Fade-In Animation
+----------------------------------------------------------
+local function FadeInFrame(frame)
+    if frame.fadeGroup then
+        frame.fadeGroup:Stop()
+    end
+
+    local ag = frame:CreateAnimationGroup()
+    frame.fadeGroup = ag
+
+    local fade = ag:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0)
+    fade:SetToAlpha(1)
+    fade:SetDuration(0.25)
+    fade:SetSmoothing("IN")
+
+    ag:Play()
+end
+
+----------------------------------------------------------
+-- Create Sidekick Sockets
 ----------------------------------------------------------
 local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
     EnsureDatabaseExists()
@@ -80,14 +101,12 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
     ------------------------------------------------------
     socket:SetScript("OnClick", function(self, button)
         if IsShiftKeyDown() and button == "LeftButton" then
-            -- Clear socket
             SidekickStationDB.iconData[self.slotType][self:GetID()] = nil
             self.assignedId = nil
             self.assignedName = "Unknown"
             self.assignedIcon = "Interface\\Icons\\INV_Misc_QuestionMark"
             self:SetNormalTexture(self.assignedIcon)
         else
-            -- Summon assigned mount/pet
             local clickedData = SidekickStationDB.iconData[self.slotType][self:GetID()]
             if clickedData then
                 self.assignedId = clickedData.id
@@ -172,7 +191,7 @@ CreateTitle(SidekickStationFrame, "Mounts", 20)
 CreateTitle(SidekickStationFrame, "Pets", 110)
 
 ----------------------------------------------------------
--- Close Button (Saves State)
+-- Close Button
 ----------------------------------------------------------
 local closeButton = CreateFrame("Button", nil, SidekickStationFrame, "UIPanelCloseButton")
 closeButton:SetPoint("TOPRIGHT", SidekickStationFrame, "TOPRIGHT", -5, -5)
@@ -210,43 +229,110 @@ local function CreateAllSockets()
 end
 
 ----------------------------------------------------------
--- Floating Button
+-- Minimap Button (Correct Blizzard-Style Implementation)
 ----------------------------------------------------------
-local floatingButton = CreateFrame("Button", "SidekickFloatingButton", UIParent)
-floatingButton:SetSize(32, 32)
-floatingButton:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+local minimapButton = CreateFrame("Button", "SidekickStationMinimapButton", UIParent)
+minimapButton:SetSize(32, 32)
+minimapButton:SetFrameStrata("MEDIUM")
 
-local buttonIcon = floatingButton:CreateTexture(nil, "ARTWORK")
-buttonIcon:SetTexture("Interface\\AddOns\\SidekickStation\\Textures\\SidekickStation.png")
-buttonIcon:SetSize(32, 32)
-buttonIcon:SetPoint("CENTER", floatingButton, "CENTER", 0, 0)
-buttonIcon:SetTexCoord(0.15, 0.85, 0.15, 0.85)
-floatingButton:SetNormalTexture(buttonIcon)
+----------------------------------------------------------
+-- Circular Mask (does NOT dim the icon)
+----------------------------------------------------------
+local mask = minimapButton:CreateMaskTexture()
+mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+mask:SetAllPoints(minimapButton)
 
-floatingButton:SetMovable(true)
-floatingButton:EnableMouse(true)
-floatingButton:RegisterForDrag("LeftButton")
-floatingButton:SetScript("OnDragStart", function(self) self:StartMoving() end)
-floatingButton:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+----------------------------------------------------------
+-- Icon (your .webp texture)
+----------------------------------------------------------
+local icon = minimapButton:CreateTexture(nil, "ARTWORK")
+icon:SetTexture("Interface\\AddOns\\SidekickStation\\Textures\\SidekickStation.png")
+icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+icon:SetAllPoints(minimapButton)
+icon:AddMaskTexture(mask)
 
-floatingButton:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Sidekick Station - Mounts & Pets", 1, 1, 1)
-    GameTooltip:Show()
-end)
-floatingButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+----------------------------------------------------------
+-- Border (Blizzard standard)
+----------------------------------------------------------
+local border = minimapButton:CreateTexture(nil, "OVERLAY")
+border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+border:SetSize(58, 58)
+border:SetPoint("CENTER", minimapButton, "CENTER", 11, -12)
 
-floatingButton:SetScript("OnClick", function()
+----------------------------------------------------------
+-- Positioning (radius increased so button is OUTSIDE)
+----------------------------------------------------------
+local function UpdateMinimapButtonPosition()
     EnsureDatabaseExists()
 
+    if type(SidekickStationDB.minimapAngle) ~= "number" then
+        SidekickStationDB.minimapAngle = 0
+    end
+
+    local angle = SidekickStationDB.minimapAngle
+    local radius = 106  -- increased from 80 → pushes button OUTSIDE the minimap
+
+    local x = math.cos(math.rad(angle)) * radius
+    local y = math.sin(math.rad(angle)) * radius
+
+    minimapButton:ClearAllPoints()
+    minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
+end
+
+----------------------------------------------------------
+-- Dragging (No Taint)
+----------------------------------------------------------
+minimapButton:RegisterForDrag("LeftButton")
+minimapButton:SetScript("OnDragStart", function(self)
+    self:SetScript("OnUpdate", function()
+        local mx, my = Minimap:GetCenter()
+        local px, py = GetCursorPosition()
+        local scale = UIParent:GetEffectiveScale()
+
+        px = px / scale
+        py = py / scale
+
+        local angle = math.deg(math.atan2(py - my, px - mx))
+        SidekickStationDB.minimapAngle = angle
+
+        UpdateMinimapButtonPosition()
+    end)
+end)
+
+minimapButton:SetScript("OnDragStop", function(self)
+    self:SetScript("OnUpdate", nil)
+end)
+
+----------------------------------------------------------
+-- Click Behavior
+----------------------------------------------------------
+minimapButton:SetScript("OnClick", function()
     if SidekickStationFrame:IsShown() then
         SidekickStationFrame:Hide()
         SidekickStationDB.windowOpen = false
     else
         CreateAllSockets()
         SidekickStationFrame:Show()
+        FadeInFrame(SidekickStationFrame)
         SidekickStationDB.windowOpen = true
     end
+end)
+
+----------------------------------------------------------
+-- Tooltip
+----------------------------------------------------------
+minimapButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("Sidekick Station", 1, 1, 1)
+    GameTooltip:AddLine("Left-Click: Toggle Window", 0.8, 0.8, 0.8)
+    GameTooltip:Show()
+end)
+
+minimapButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+minimapButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
 end)
 
 ----------------------------------------------------------
@@ -256,9 +342,16 @@ local loginFrame = CreateFrame("Frame")
 loginFrame:RegisterEvent("PLAYER_LOGIN")
 loginFrame:SetScript("OnEvent", function()
     EnsureDatabaseExists()
+
+    if type(SidekickStationDB.minimapAngle) ~= "number" then
+        SidekickStationDB.minimapAngle = 0
+    end
+
     CreateAllSockets()
+    UpdateMinimapButtonPosition()
 
     if SidekickStationDB.windowOpen then
         SidekickStationFrame:Show()
+        FadeInFrame(SidekickStationFrame)
     end
 end)
