@@ -3,7 +3,7 @@
 ## Title: SidekickStation
 ## Category: Interface Enhancements
 ## Notes: Managing your Favorite Mounts and Pets
-## SavedVariablesPerCharacter: SidekickStationDB_Lite
+## SavedVariablesPerCharacter: SidekickStationDB
 ## Author: Christopher Young
 ## IconTexture: Interface\AddOns\SidekickStation\Textures\SidekickStation.png
 SidekickStation.lua

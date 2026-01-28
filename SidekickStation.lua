@@ -1,13 +1,18 @@
 ----------------------------------------------------------
--- Sidekick Station Lite: Mount and Pet Organization
+-- Sidekick Station: Mount and Pet Organizer
 ----------------------------------------------------------
 
--- ✅ Ensure the database exists before anything runs
+----------------------------------------------------------
+-- Database Initialization
+----------------------------------------------------------
 local function EnsureDatabaseExists()
-    if not _G["SidekickStationDB_Lite"] then
-        _G["SidekickStationDB_Lite"] = { iconData = { mounts = {}, pets = {} } }
+    if not _G["SidekickStationDB"] then
+        _G["SidekickStationDB"] = {
+            iconData = { mounts = {}, pets = {} },
+            windowOpen = true
+        }
     end
-    SidekickStationDB_Lite = _G["SidekickStationDB_Lite"]
+    SidekickStationDB = _G["SidekickStationDB"]
 end
 
 EnsureDatabaseExists()
@@ -28,7 +33,9 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
     socket:RegisterForClicks("AnyUp")
     socket:RegisterForDrag("LeftButton")
 
-    -- ✅ Tooltip Logic
+    ------------------------------------------------------
+    -- Tooltip
+    ------------------------------------------------------
     socket:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
 
@@ -40,8 +47,6 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
                 local speciesID = C_PetJournal.GetPetInfoByPetID(self.assignedId)
                 local petName = C_PetJournal.GetPetInfoBySpeciesID(speciesID)
                 GameTooltip:SetText(petName or "Unknown Pet")
-            else
-                GameTooltip:SetText("Item not recognized")
             end
         else
             GameTooltip:SetText("Drag a Favorite here to Socket Them")
@@ -54,8 +59,10 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
         GameTooltip:Hide()
     end)
 
-    -- ✅ Retrieve stored data for this socket
-    local savedData = SidekickStationDB_Lite.iconData[slotType][index]
+    ------------------------------------------------------
+    -- Load Saved Data
+    ------------------------------------------------------
+    local savedData = SidekickStationDB.iconData[slotType][index]
     if savedData and savedData.id then
         socket.assignedId = savedData.id
         socket.assignedName = savedData.name
@@ -68,24 +75,25 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
         socket:SetNormalTexture(socket.assignedIcon)
     end
 
-    -- ✅ Click functionality
+    ------------------------------------------------------
+    -- Click Behavior
+    ------------------------------------------------------
     socket:SetScript("OnClick", function(self, button)
         if IsShiftKeyDown() and button == "LeftButton" then
-            -- ✅ Clear socket contents
-            SidekickStationDB_Lite.iconData[self.slotType][self:GetID()] = nil
+            -- Clear socket
+            SidekickStationDB.iconData[self.slotType][self:GetID()] = nil
             self.assignedId = nil
             self.assignedName = "Unknown"
             self.assignedIcon = "Interface\\Icons\\INV_Misc_QuestionMark"
             self:SetNormalTexture(self.assignedIcon)
         else
-            -- ✅ Normal behavior: Summon mount/pet if assigned
-            local clickedData = SidekickStationDB_Lite.iconData[self.slotType] and SidekickStationDB_Lite.iconData[self.slotType][self:GetID()]
-
+            -- Summon assigned mount/pet
+            local clickedData = SidekickStationDB.iconData[self.slotType][self:GetID()]
             if clickedData then
                 self.assignedId = clickedData.id
                 self.assignedName = clickedData.name
                 self.assignedIcon = clickedData.icon
-                
+
                 if self.slotType == "mounts" then
                     C_MountJournal.SummonByID(self.assignedId)
                 elseif self.slotType == "pets" then
@@ -95,7 +103,9 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
         end
     end)
 
-    -- ✅ Drag & drop functionality
+    ------------------------------------------------------
+    -- Drag-and-Drop Assignment
+    ------------------------------------------------------
     socket:SetScript("OnReceiveDrag", function(self)
         local cursorType, itemID, itemName, itemTexture = GetCursorInfo()
 
@@ -109,48 +119,47 @@ local function CreateSidekickSocket(parent, slotType, xOffset, yOffset, index)
             return
         end
 
-        -- ✅ Assign item to the socket
         if itemID and itemTexture then
             self.assignedId = itemID
             self.assignedName = itemName or "Unknown"
             self.assignedIcon = itemTexture
             self:SetNormalTexture(self.assignedIcon)
 
-            -- ✅ Store data in SidekickStationDB_Lite
-            SidekickStationDB_Lite.iconData[self.slotType][self:GetID()] = {
+            SidekickStationDB.iconData[self.slotType][self:GetID()] = {
                 id = self.assignedId,
                 name = self.assignedName,
                 icon = self.assignedIcon
             }
+
             ClearCursor()
         end
     end)
 
     return socket
 end
+
 ----------------------------------------------------------
--- Create the main Sidekick Station Lite UI
+-- Main UI Frame
 ----------------------------------------------------------
-local SidekickStationLite = CreateFrame("Frame", "SidekickStationLiteFrame", UIParent, "BackdropTemplate")
-SidekickStationLite:SetSize(160, 216) -- ✅ Resized for new layout
-SidekickStationLite:SetPoint("CENTER")
-SidekickStationLite:SetBackdrop({
+local SidekickStationFrame = CreateFrame("Frame", "SidekickStationFrame", UIParent, "BackdropTemplate")
+SidekickStationFrame:SetSize(160, 216)
+SidekickStationFrame:SetPoint("CENTER")
+SidekickStationFrame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile = true, tileSize = 16, edgeSize = 16
 })
-SidekickStationLite:SetBackdropColor(0, 0, 0, 0.8)
-SidekickStationLite:Hide() -- ✅ UI no longer auto-opens
+SidekickStationFrame:SetBackdropColor(0, 0, 0, 0.8)
+SidekickStationFrame:Hide()
 
--- ✅ Make SidekickStationLite draggable
-SidekickStationLite:SetMovable(true)
-SidekickStationLite:EnableMouse(true)
-SidekickStationLite:RegisterForDrag("LeftButton")
-SidekickStationLite:SetScript("OnDragStart", function(self) self:StartMoving() end)
-SidekickStationLite:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+SidekickStationFrame:SetMovable(true)
+SidekickStationFrame:EnableMouse(true)
+SidekickStationFrame:RegisterForDrag("LeftButton")
+SidekickStationFrame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+SidekickStationFrame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 
 ----------------------------------------------------------
--- Titles for Mounts & Pets sections
+-- Titles
 ----------------------------------------------------------
 local function CreateTitle(parent, text, xOffset)
     local title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -159,79 +168,97 @@ local function CreateTitle(parent, text, xOffset)
     return title
 end
 
-CreateTitle(SidekickStationLite, "Mounts", 20)
-CreateTitle(SidekickStationLite, "Pets", 110)
+CreateTitle(SidekickStationFrame, "Mounts", 20)
+CreateTitle(SidekickStationFrame, "Pets", 110)
 
 ----------------------------------------------------------
--- Close Button
+-- Close Button (Saves State)
 ----------------------------------------------------------
-local closeButton = CreateFrame("Button", nil, SidekickStationLite, "UIPanelCloseButton")
-closeButton:SetPoint("TOPRIGHT", SidekickStationLite, "TOPRIGHT", -5, -5)
-closeButton:SetScript("OnClick", function() SidekickStationLite:Hide() end)
+local closeButton = CreateFrame("Button", nil, SidekickStationFrame, "UIPanelCloseButton")
+closeButton:SetPoint("TOPRIGHT", SidekickStationFrame, "TOPRIGHT", -5, -5)
+closeButton:SetScript("OnClick", function()
+    SidekickStationFrame:Hide()
+    SidekickStationDB.windowOpen = false
+end)
 
 ----------------------------------------------------------
 -- Title Bar
 ----------------------------------------------------------
-local titleBar = SidekickStationLite:CreateTexture(nil, "BACKGROUND")
-titleBar:SetSize(160, 30) -- Adjusted for Lite version
-titleBar:SetPoint("TOP", SidekickStationLite, "TOP", 0, 0)
-titleBar:SetColorTexture(0.5, 0, 0) -- Dark red background
+local titleBar = SidekickStationFrame:CreateTexture(nil, "BACKGROUND")
+titleBar:SetSize(160, 30)
+titleBar:SetPoint("TOP", SidekickStationFrame, "TOP", 0, 0)
+titleBar:SetColorTexture(0.5, 0, 0)
 
-local titleText = SidekickStationLite:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+local titleText = SidekickStationFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 titleText:SetPoint("CENTER", titleBar, "CENTER", -4, -2)
-titleText:SetText("|cffffd700Sidekicks|r") -- Yellow text
+titleText:SetText("|cffffd700Sidekicks|r")
 
 ----------------------------------------------------------
--- Floating Button (Draggable)
+-- Create Sockets Once
 ----------------------------------------------------------
-local floatingButton = CreateFrame("Button", "SidekickFloatingButtonLite", UIParent)
+local socketsCreated = false
+
+local function CreateAllSockets()
+    if socketsCreated then return end
+    socketsCreated = true
+
+    for i = 0, 3 do
+        CreateSidekickSocket(SidekickStationFrame, "mounts", 16, -50 - (i * 40), i)
+        CreateSidekickSocket(SidekickStationFrame, "mounts", 60, -50 - (i * 40), i + 5)
+        CreateSidekickSocket(SidekickStationFrame, "pets", 110, -50 - (i * 40), i)
+    end
+end
+
+----------------------------------------------------------
+-- Floating Button
+----------------------------------------------------------
+local floatingButton = CreateFrame("Button", "SidekickFloatingButton", UIParent)
 floatingButton:SetSize(32, 32)
 floatingButton:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
 
--- ✅ Circular icon with custom texture
 local buttonIcon = floatingButton:CreateTexture(nil, "ARTWORK")
 buttonIcon:SetTexture("Interface\\AddOns\\SidekickStation\\Textures\\SidekickStation.png")
 buttonIcon:SetSize(32, 32)
 buttonIcon:SetPoint("CENTER", floatingButton, "CENTER", 0, 0)
--- buttonIcon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-	buttonIcon:SetTexCoord(0.15, 0.85, 0.15, 0.85) -- Crops edges for a rounded look
+buttonIcon:SetTexCoord(0.15, 0.85, 0.15, 0.85)
 floatingButton:SetNormalTexture(buttonIcon)
 
--- ✅ Drag functionality - Freely movable
 floatingButton:SetMovable(true)
 floatingButton:EnableMouse(true)
 floatingButton:RegisterForDrag("LeftButton")
 floatingButton:SetScript("OnDragStart", function(self) self:StartMoving() end)
 floatingButton:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 
--- ✅ Tooltip
 floatingButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Sidekick Station Lite - Streamlined Mounts & Pets", 1, 1, 1)
+    GameTooltip:AddLine("Sidekick Station - Mounts & Pets", 1, 1, 1)
     GameTooltip:Show()
 end)
 floatingButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
--- ✅ Click to toggle UI properly
 floatingButton:SetScript("OnClick", function()
-    if SidekickStationLite:IsShown() then
-        SidekickStationLite:Hide()
+    EnsureDatabaseExists()
+
+    if SidekickStationFrame:IsShown() then
+        SidekickStationFrame:Hide()
+        SidekickStationDB.windowOpen = false
     else
-        EnsureDatabaseExists()
-        SidekickStationDB_Lite.iconData = SidekickStationDB_Lite.iconData or { mounts = {}, pets = {} }
+        CreateAllSockets()
+        SidekickStationFrame:Show()
+        SidekickStationDB.windowOpen = true
+    end
+end)
 
-        -- ✅ Maintain previous position
-        local x, y = SidekickStationLite:GetLeft(), SidekickStationLite:GetTop()
-        SidekickStationLite:ClearAllPoints()
-        SidekickStationLite:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+----------------------------------------------------------
+-- Auto-Open on Login
+----------------------------------------------------------
+local loginFrame = CreateFrame("Frame")
+loginFrame:RegisterEvent("PLAYER_LOGIN")
+loginFrame:SetScript("OnEvent", function()
+    EnsureDatabaseExists()
+    CreateAllSockets()
 
--- ✅ Create sockets (5 rows, 2 columns for mounts, 1 column for pets)
-for i = 0, 3 do  -- Adjusted to exclude row 6
-    CreateSidekickSocket(SidekickStationLite, "mounts", 16, -50 - (i * 40), i)  -- Column 1 (Mounts)
-    CreateSidekickSocket(SidekickStationLite, "mounts", 60, -50 - (i * 40), i + 5)  -- Column 2 (Mounts)
-    CreateSidekickSocket(SidekickStationLite, "pets", 110, -50 - (i * 40), i)  -- Column 3 (Pets)
-end
-
-        SidekickStationLite:Show()
+    if SidekickStationDB.windowOpen then
+        SidekickStationFrame:Show()
     end
 end)
